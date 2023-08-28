@@ -1,0 +1,44 @@
+int GigabitEthernet1 
+  ip nat outside 
+exit
+
+int GigabitEthernet2
+  ip nat inside
+exit
+
+ip access-list extended NAT
+  permit ip ${spoke_001_address} ${spoke_001_wildcard_mask} any 
+  permit ip ${spoke_002_address} ${spoke_002_wildcard_mask} any  
+exit
+
+ip nat inside source list NAT interface GigabitEthernet1 overload
+ip route 10.0.0.0 255.0.0.0 ${private_subnet_default_gateway}
+ip route 172.16.0.0 255.240.0.0 ${private_subnet_default_gateway}
+ip route 192.168.0.0 255.255.0.0 ${private_subnet_default_gateway}
+ip route ${route_server_address} ${route_server_mask} ${private_subnet_default_gateway}
+
+router bgp ${nva_asn}
+ bgp log-neighbor-changes
+ neighbor ${route_server_primary_ip} remote-as 65515
+ neighbor ${route_server_primary_ip} ebgp-multihop 255
+ neighbor ${route_server_primary_ip} update-source GigabitEthernet2
+ neighbor ${route_server_secondary_ip} remote-as 65515
+ neighbor ${route_server_secondary_ip} ebgp-multihop 255
+ neighbor ${route_server_secondary_ip} update-source GigabitEthernet2
+ !
+ address-family ipv4
+  network 0.0.0.0 mask 0.0.0.0
+  network 172.16.0.0 mask 255.240.0.0 
+  network 192.168.0.0 mask 255.255.0.0 
+  network 10.0.0.0 mask 255.0.0.0
+  neighbor ${route_server_primary_ip} activate
+  neighbor ${route_server_primary_ip} route-map ars out
+  neighbor ${route_server_secondary_ip} activate
+  neighbor ${route_server_secondary_ip} route-map ars out
+ exit-address-family
+exit
+
+route-map ars
+ set as-path prepend ${nva_asn}
+
+wr mem
